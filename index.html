@@ -221,6 +221,22 @@
   .story summary{cursor:pointer;color:var(--sky);font-weight:700}
   @media (max-width:860px){.news-layout{grid-template-columns:1fr}}
 
+
+  .story.has-photo{display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:start}
+  .story-img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:16px;background:var(--sky-3)}
+  @media (max-width:560px){.story.has-photo{grid-template-columns:1fr}}
+  .read-btn{margin-top:10px;background:none;border:0;padding:0;font:inherit;font-weight:700;color:var(--sky);cursor:pointer}
+  .read-btn:hover{text-decoration:underline}
+  .reader{width:min(720px,100% - 24px);max-height:88vh;border:0;border-radius:26px;padding:0;color:var(--navy);box-shadow:0 30px 80px rgba(14,34,64,.4)}
+  .reader::backdrop{background:rgba(14,34,64,.6);backdrop-filter:blur(4px)}
+  .reader-body{padding:28px}
+  .reader-body img{width:calc(100% + 56px);max-width:none;margin:-28px -28px 20px;aspect-ratio:16/9;object-fit:cover}
+  .reader-body time{color:var(--muted);font-size:.9rem}
+  .reader-body h3{font-size:clamp(1.5rem,3.4vw,2.1rem);margin:4px 0 14px;line-height:1.2}
+  .reader-body p{margin:0 0 14px;max-width:68ch}
+  .reader-lead{font-size:1.1rem;font-weight:700}
+  .reader-close{position:absolute;top:12px;right:12px;z-index:2;background:var(--navy);color:#fff;border:0;border-radius:999px;padding:8px 16px;font:inherit;font-size:.9rem;cursor:pointer}
+
   /* events */
   .event{display:grid;grid-template-columns:86px 1fr;gap:18px;padding:18px;border-radius:22px;background:#fff;border:1px solid var(--line);margin-bottom:12px}
   .date{background:linear-gradient(160deg,var(--sky),var(--sky-2));color:#fff;border-radius:18px;text-align:center;padding:10px 4px;height:max-content}
@@ -430,6 +446,11 @@
   </div>
 </main>
 
+<dialog class="reader" id="reader" aria-label="News article">
+  <button class="reader-close" aria-label="Close article">Close</button>
+  <div class="reader-body"></div>
+</dialog>
+
 <footer>
   <div class="wrap">
     <div class="cols">
@@ -460,10 +481,17 @@
    EDIT HERE — update the lists below, save, and upload.
    ========================================================= */
 
+// Paste your Apps Script web app link here (ends in /exec).
+// Leave it as "" to use only the lists below.
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbyx1aXronSEXtpc4e8yOiRQTXPkHNdPME6Kjna9894x4zIU5m2EcInWi1ROCt3VesjtXA/exec";
+
+// The lists below are BACKUP content. Once SHEET_URL is set,
+// the website shows what is in your Google Sheet instead.
+
 // Words that morph in the big headline: "Growing confident ____"
 const MORPH_WORDS = ["learners", "leaders", "readers", "citizens"];
 
-const FACULTY = [
+let FACULTY = [
   // group: "Elementary", "Junior High", "Senior High", "ALS", or "Staff"
   { name: "Engile E. Cemine", role: "Teacher I", group: "Elementary" },
   { name: "April L. Lusterio", role: "Teacher I", group: "Elementary" },
@@ -532,7 +560,7 @@ const FACULTY = [
   { name: "Arnel Buyan", role: "School Guard", group: "Staff" },
 ];
 
-const DIVISION = [
+let DIVISION = [
   { name: "Victoria V. Gazo", role: "Schools Division Superintendent" },
   { name: "Rosemarie T. Macesar", role: "Asst. Schools Division Superintendent" },
   { name: "Roberto D. Napere, Jr.", role: "Asst. Schools Division Superintendent" },
@@ -540,14 +568,14 @@ const DIVISION = [
   { name: "Nancy B. Panistante", role: "Chief, School Governance and Operations Division" },
 ];
 
-const ANNOUNCEMENTS = [
+let ANNOUNCEMENTS = [
   // pinned: true keeps it on top with a label
   { date: "2026-10-19", text: "Second Quarter classes are ongoing. Please check the events tab for exam dates.", pinned: true },
   { date: "2026-10-16", text: "Parents are invited to the Homeroom PTA meeting. Schedule to follow from advisers." },
   { date: "2026-10-12", text: "Learners are reminded to wear their complete uniform and ID every school day." },
 ];
 
-const NEWS = [
+let NEWS = [
   { date: "2026-10-10", title: "Sample headline: Learners join school tree-planting activity",
     summary: "Write a one- or two-sentence summary of the story here.",
     body: "Write the full story here. Keep paragraphs short so it reads well on phones." },
@@ -556,7 +584,7 @@ const NEWS = [
     body: "Write the full story here." },
 ];
 
-const EVENTS = [
+let EVENTS = [
   // category: "Academic", "Celebrations", "Sports & Clubs", or "Meetings"
   { date: "2026-10-30", title: "Sample: Second Quarter Examination", category: "Academic", place: "All classrooms", note: "Replace with the actual schedule." },
   { date: "2026-11-20", title: "Sample: Reading Month Culminating Program", category: "Celebrations", place: "School covered court", note: "" },
@@ -654,69 +682,113 @@ for(let i=0;i<9;i++){
   draw(0);
 })();
 
-/* highlight cards under the hero */
-(function(){
-  const pinned = [...ANNOUNCEMENTS].sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)||b.date.localeCompare(a.date))[0];
+/* values marquee */
+const vals = ["Maka-Diyos","Maka-tao","Makakalikasan","Makabansa","Impalutao Integrated School","Schools Division of Bukidnon"];
+document.getElementById("marquee").innerHTML = [...vals,...vals].map(v=>`<span><i></i>${v}</span>`).join("");
+
+/* tabs helper (remembers the selected tab when content refreshes) */
+function makeTabs(el, labels, onPick){
+  const keep = el.querySelector('.tab[aria-selected="true"]')?.textContent;
+  const first = labels.includes(keep) ? keep : labels[0];
+  el.innerHTML = labels.map(l=>`<button class="tab" role="tab" aria-selected="${l===first}">${esc(l)}</button>`).join("");
+  el.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>{
+    el.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected", b===btn)); onPick(btn.textContent);
+  }));
+  onPick(first);
+}
+
+const byNewest = (a,b)=>b.date.localeCompare(a.date);
+const paras = t => String(t||"").split(/\n+/).map(x=>x.trim()).filter(Boolean).map(x=>`<p>${esc(x)}</p>`).join("");
+
+/* news article reader */
+const reader = document.getElementById("reader");
+function openStory(i){
+  const n = [...NEWS].sort(byNewest)[i]; if(!n) return;
+  reader.querySelector(".reader-body").innerHTML = `
+    ${n.photo?`<img src="${esc(n.photo)}" alt="" referrerpolicy="no-referrer">`:""}
+    <time>${fmt(n.date)}</time><h3>${esc(n.title)}</h3>
+    ${n.summary?`<p class="reader-lead">${esc(n.summary)}</p>`:""}${paras(n.body)}`;
+  reader.showModal ? reader.showModal() : reader.setAttribute("open","");
+}
+reader.querySelector(".reader-close").addEventListener("click",()=>reader.close());
+reader.addEventListener("click",e=>{ if(e.target===reader) reader.close(); });
+
+function renderContent(){
+  /* highlight cards under the hero */
+  const pinned = [...ANNOUNCEMENTS].sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)||byNewest(a,b))[0];
   const next = EVENTS.filter(e=>e.date>=today).sort((a,b)=>a.date.localeCompare(b.date))[0];
-  const story = [...NEWS].sort((a,b)=>b.date.localeCompare(a.date))[0];
+  const story = [...NEWS].sort(byNewest)[0];
   document.getElementById("rail").innerHTML = `
     <div class="tile"><div class="tag">Core value</div><h4>Makakalikasan</h4><div class="txt">We care for our school grounds and the nature around us.</div></div>
     <a class="tile dark" href="#news" style="text-decoration:none"><div class="tag">Announcement</div><h4>${pinned?fmt(pinned.date):""}</h4><div class="txt">${pinned?esc(pinned.text):"No announcements yet."}</div></a>
     <div class="tile photo"><img src="landmark.jpg" alt="I love Impalutao IS sign"></div>
     <a class="tile gold" href="#events" style="text-decoration:none"><div class="tag">Next event</div><h4>${next?esc(next.title):"No upcoming events"}</h4>${next?fmt(next.date):""}</a>
-    <a class="tile" href="#news" style="text-decoration:none"><div class="tag">Latest news</div><h4>${story?esc(story.title):""}</h4>${story?fmt(story.date):""}</a>`;
-})();
+    <a class="tile" href="#news" style="text-decoration:none"><div class="tag">Latest news</div><h4>${story?esc(story.title):"No news yet"}</h4>${story?fmt(story.date):""}</a>`;
 
-/* values marquee */
-const vals = ["Maka-Diyos","Maka-tao","Makakalikasan","Makabansa","Impalutao Integrated School","Schools Division of Bukidnon"];
-document.getElementById("marquee").innerHTML = [...vals,...vals].map(v=>`<span><i></i>${v}</span>`).join("");
+  /* faculty */
+  makeTabs(document.getElementById("facultyTabs"), ["All","Elementary","Junior High","Senior High","ALS","Staff"], g=>{
+    const list = FACULTY.filter(p=>g==="All"||p.group===g);
+    document.getElementById("facultyGrid").innerHTML = list.map((p,i)=>`
+      <div class="person"><div class="avatar" style="animation-delay:-${i*1.3}s">${initials(p.name)}</div>
+      <div><b>${esc(p.name)}</b><span>${esc(p.role)}</span></div></div>`).join("") || `<p class="empty">No one listed yet.</p>`;
+  });
 
-/* tabs helper */
-function makeTabs(el, labels, onPick){
-  el.innerHTML = labels.map((l,i)=>`<button class="tab" role="tab" aria-selected="${i===0}">${esc(l)}</button>`).join("");
-  el.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>{
-    el.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected", b===btn)); onPick(btn.textContent);
+  /* announcements */
+  document.getElementById("noticeList").innerHTML = [...ANNOUNCEMENTS]
+    .sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0) || byNewest(a,b))
+    .map(a=>`<div class="notice${a.pinned?" pinned":""}"><time>${fmt(a.date)}</time>${a.pinned?'<span class="pin">Pinned</span>':""}<p>${esc(a.text)}</p></div>`).join("")
+    || `<p class="empty" style="color:#AFC2DB">No announcements right now.</p>`;
+
+  /* news */
+  document.getElementById("newsList").innerHTML = [...NEWS].sort(byNewest).map((n,i)=>`
+    <article class="story${n.photo?" has-photo":""}">
+      ${n.photo?`<img class="story-img" src="${esc(n.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:""}
+      <div><time>${fmt(n.date)}</time><h4>${esc(n.title)}</h4><p>${esc(n.summary)}</p>
+      ${n.body?`<button class="read-btn" data-i="${i}">Read the full story</button>`:""}</div>
+    </article>`).join("") || `<p class="empty">No news yet.</p>`;
+  document.querySelectorAll(".read-btn").forEach(b=>b.addEventListener("click",()=>openStory(+b.dataset.i)));
+
+  /* events */
+  makeTabs(document.getElementById("eventTabs"), ["Upcoming","Academic","Celebrations","Sports & Clubs","Meetings"], c=>{
+    const list = EVENTS.filter(e=> c==="Upcoming" ? e.date>=today : e.category===c).sort((a,b)=>a.date.localeCompare(b.date));
+    document.getElementById("eventList").innerHTML = list.map(e=>{
+      const d = new Date(e.date+"T00:00");
+      return `<div class="event"><div class="date"><b>${d.getDate()}</b><span>${MONTHS[d.getMonth()]} ${d.getFullYear()}</span></div>
+      <div><h4>${esc(e.title)}</h4>${e.note?`<p>${esc(e.note)}</p>`:""}${e.place?`<div class="where">${esc(e.place)}</div>`:""}</div></div>`;
+    }).join("") || `<p class="empty">No events in this category yet.</p>`;
+  });
+
+  /* organizational chart */
+  document.getElementById("divRow").innerHTML = DIVISION.map(d=>`<div class="org-node"><b>${esc(d.name)}</b><span>${esc(d.role)}</span></div>`).join("");
+  const DEPTS = [["Elementary","Elementary Department"],["Junior High","Junior High School"],["Senior High","Senior High School"],["ALS","Alternative Learning System"],["Staff","Administrative and Support Staff"]];
+  document.getElementById("deptRow").innerHTML = DEPTS.map(([g,label])=>{
+    const n = FACULTY.filter(p=>p.group===g).length;
+    return `<button class="org-node" data-group="${g}"><b>${label}</b><span class="count">${n}</span><span>${g==="Staff"?"staff":(n===1?"teacher":"teachers")}</span></button>`;
+  }).join("");
+  document.querySelectorAll("#deptRow .org-node").forEach(b=>b.addEventListener("click",()=>{
+    const tab = [...document.querySelectorAll("#facultyTabs .tab")].find(t=>t.textContent===b.dataset.group);
+    if(tab){ tab.click(); document.getElementById("faculty").scrollIntoView(); }
   }));
-  onPick(labels[0]);
+  document.getElementById("facultyCount").textContent = FACULTY.length + 1;
 }
 
-makeTabs(document.getElementById("facultyTabs"), ["All","Elementary","Junior High","Senior High","ALS","Staff"], g=>{
-  const list = FACULTY.filter(p=>g==="All"||p.group===g);
-  document.getElementById("facultyGrid").innerHTML = list.map((p,i)=>`
-    <div class="person"><div class="avatar" style="animation-delay:-${i*1.3}s">${initials(p.name)}</div>
-    <div><b>${esc(p.name)}</b><span>${esc(p.role)}</span></div></div>`).join("") || `<p class="empty">No one listed yet.</p>`;
-});
-
-document.getElementById("noticeList").innerHTML = [...ANNOUNCEMENTS]
-  .sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0) || b.date.localeCompare(a.date))
-  .map(a=>`<div class="notice${a.pinned?" pinned":""}"><time>${fmt(a.date)}</time>${a.pinned?'<span class="pin">Pinned</span>':""}<p>${esc(a.text)}</p></div>`).join("");
-
-document.getElementById("newsList").innerHTML = [...NEWS].sort((a,b)=>b.date.localeCompare(a.date))
-  .map(n=>`<article class="story"><time>${fmt(n.date)}</time><h4>${esc(n.title)}</h4><p>${esc(n.summary)}</p>
-  ${n.body?`<details><summary>Read the full story</summary><p>${esc(n.body)}</p></details>`:""}</article>`).join("");
-
-makeTabs(document.getElementById("eventTabs"), ["Upcoming","Academic","Celebrations","Sports & Clubs","Meetings"], c=>{
-  const list = EVENTS.filter(e=> c==="Upcoming" ? e.date>=today : e.category===c).sort((a,b)=>a.date.localeCompare(b.date));
-  document.getElementById("eventList").innerHTML = list.map(e=>{
-    const d = new Date(e.date+"T00:00");
-    return `<div class="event"><div class="date"><b>${d.getDate()}</b><span>${MONTHS[d.getMonth()]} ${d.getFullYear()}</span></div>
-    <div><h4>${esc(e.title)}</h4>${e.note?`<p>${esc(e.note)}</p>`:""}${e.place?`<div class="where">${esc(e.place)}</div>`:""}</div></div>`;
-  }).join("") || `<p class="empty">No events in this category yet.</p>`;
-});
-
-
-/* organizational chart */
-document.getElementById("divRow").innerHTML = DIVISION.map(d=>`<div class="org-node"><b>${esc(d.name)}</b><span>${esc(d.role)}</span></div>`).join("");
-const DEPTS = [["Elementary","Elementary Department"],["Junior High","Junior High School"],["Senior High","Senior High School"],["ALS","Alternative Learning System"],["Staff","Administrative and Support Staff"]];
-document.getElementById("deptRow").innerHTML = DEPTS.map(([g,label])=>{
-  const n = FACULTY.filter(p=>p.group===g).length;
-  return `<button class="org-node" data-group="${g}"><b>${label}</b><span class="count">${n}</span><span>${g==="Staff"?"staff":(n===1?"teacher":"teachers")}</span></button>`;
-}).join("");
-document.querySelectorAll("#deptRow .org-node").forEach(b=>b.addEventListener("click",()=>{
-  const tab = [...document.querySelectorAll("#facultyTabs .tab")].find(t=>t.textContent===b.dataset.group);
-  if(tab){ tab.click(); document.getElementById("faculty").scrollIntoView(); }
-}));
-document.getElementById("facultyCount").textContent = FACULTY.length + 1;
+/* show backup content right away, then load the Google Sheet */
+renderContent();
+if(SHEET_URL){
+  const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(), 12000);
+  fetch(SHEET_URL, {signal: ctrl.signal})
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d || !d.ok) throw new Error(d && d.error || "Sheet did not respond");
+      if(Array.isArray(d.news)) NEWS = d.news;
+      if(Array.isArray(d.announcements)) ANNOUNCEMENTS = d.announcements;
+      if(Array.isArray(d.events)) EVENTS = d.events;
+      if(Array.isArray(d.faculty) && d.faculty.length) FACULTY = d.faculty;
+      if(Array.isArray(d.division) && d.division.length) DIVISION = d.division;
+      renderContent();
+    })
+    .catch(err=>console.warn("Google Sheet not loaded, showing backup content:", err));
+}
 
 /* nav: menu, solid on scroll, active link */
 const navBar = document.getElementById("navBar"), links = document.getElementById("links"), menuBtn = document.querySelector(".menu-btn");
